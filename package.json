@@ -1,0 +1,23 @@
+{
+  "name": "@socket.io/sticky",
+  "version": "0.0.1",
+  "description": "An alternative to the sticky-session package (https://github.com/indutny/sticky-session)",
+  "main": "index.js",
+  "scripts": {
+    "format:check": "prettier --check \"index.js\" \"test/**/*.js\"",
+    "format:fix": "prettier --write \"index.js\" \"test/**/*.js\"",
+    "test": "npm run format:check && nyc mocha --timeout 5000"
+  },
+  "files": [
+    "index.js"
+  ],
+  "author": "Damien Arrachequesne <damien.arrachequesne@gmail.com>",
+  "license": "MIT",
+  "devDependencies": {
+    "mocha": "^8.2.1",
+    "nyc": "^15.1.0",
+    "prettier": "^2.2.1",
+    "socket.io": "^3.1.0",
+    "socket.io-client": "^3.1.0"
+  }
+}
