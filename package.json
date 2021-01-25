@@ -13,11 +13,22 @@
   ],
   "author": "Damien Arrachequesne <damien.arrachequesne@gmail.com>",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/darrachequesne/socket.io-sticky.git"
+  },
+  "homepage": "https://github.com/darrachequesne/socket.io-sticky#readme",
   "devDependencies": {
     "mocha": "^8.2.1",
     "nyc": "^15.1.0",
     "prettier": "^2.2.1",
     "socket.io": "^3.1.0",
     "socket.io-client": "^3.1.0"
-  }
+  },
+  "keywords": [
+    "socket.io",
+    "websocket",
+    "cluster",
+    "node.js"
+  ]
 }
