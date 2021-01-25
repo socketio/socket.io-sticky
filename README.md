@@ -4,6 +4,8 @@ A simple and performant way to use [Socket.IO](https://socket.io/) within a [clu
 
 Unlike other packages like [sticky-session](https://github.com/indutny/sticky-session), the routing is based on the session ID (the `sid` query parameter).
 
+![Cluster diagram](./assets/socket.io-cluster.png)
+
 See also:
 
 - [sticky-session](https://github.com/indutny/sticky-session) (routing based on `connection.remoteAddress`)
@@ -84,6 +86,8 @@ const socket = io({
 ```
 
 - the [Redis adapter](https://github.com/socketio/socket.io-redis) (or any compatible adapter) is still needed when broadcasting packets
+
+![Cluster diagram with Redis](./assets/socket.io-cluster-redis.png)
 
 ## License
 
