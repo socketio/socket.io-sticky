@@ -93,6 +93,10 @@ const socket = io({
 
 ![Cluster diagram with Redis](./assets/socket.io-cluster-redis.png)
 
+- this module is not compatible with an HTTPS server
+
+For more information, please see [this issue](https://github.com/socketio/socket.io-sticky/issues/3).
+
 ## License
 
 MIT
