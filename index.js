@@ -99,6 +99,11 @@ const setupWorker = (io) => {
   process.on("message", ({ type, data }, socket) => {
     switch (type) {
       case "sticky:connection":
+        if (!socket) {
+          // might happen if the socket is closed during the transfer to the worker
+          // see https://nodejs.org/api/child_process.html#child_process_example_sending_a_socket_object
+          return;
+        }
         io.httpServer.emit("connection", socket); // inject connection
         // republish first chunk
         if (socket._handle.onread.length === 1) {
