@@ -15,9 +15,9 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/darrachequesne/socket.io-sticky.git"
+    "url": "git+https://github.com/socketio/socket.io-sticky.git"
   },
-  "homepage": "https://github.com/darrachequesne/socket.io-sticky#readme",
+  "homepage": "https://github.com/socketio/socket.io-sticky#readme",
   "devDependencies": {
     "mocha": "^8.2.1",
     "nyc": "^15.1.0",
