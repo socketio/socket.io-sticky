@@ -186,7 +186,9 @@ const setupWorker = (io) => {
           }
           // handle exception if client closed connection on his side
           try {
-            socket?.write(d);
+            if (socket) {
+              socket.write(d);
+            }
           } catch (e) {
             log.debug("Error on socket write", e);
           }
@@ -194,7 +196,9 @@ const setupWorker = (io) => {
         tunnel.on("end", () => {
           // handle exception if client closed connection on his side
           try {
-            socket?.end();
+            if (socket) {
+              socket.end();
+            }
           } catch (e) {
             log.debug("Error on socket close", e);
           }
