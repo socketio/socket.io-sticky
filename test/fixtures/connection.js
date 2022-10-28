@@ -8,6 +8,13 @@ if (cluster.isWorker) {
   const httpServer = http.createServer();
   const io = new Server(httpServer);
   setupWorker(io);
+
+  io.on("connection", (socket) => {
+    socket.on("foo", (val) => {
+      socket.emit("bar", val);
+    });
+  });
+
   return;
 }
 
@@ -20,7 +27,7 @@ for (let i = 0; i < WORKER_COUNT; i++) {
 const httpServer = http.createServer();
 
 setupMaster(httpServer, {
-  loadBalancingMethod: process.env.LB_METHOD,
+  loadBalancingMethod: process.env.LB_METHOD || "least-connection",
 });
 
 const waitFor = (emitter, event) => {
@@ -31,7 +38,13 @@ const waitFor = (emitter, event) => {
 
 httpServer.listen(async () => {
   const port = httpServer.address().port;
-  const socket = ioc(`http://localhost:${port}`);
+
+  const socket = ioc(`http://localhost:${port}`, {
+    transports: process.env.TRANSPORT
+      ? [process.env.TRANSPORT]
+      : ["polling", "websocket"],
+  });
+
   await waitFor(socket, "connect");
 
   socket.disconnect().connect();
@@ -39,6 +52,12 @@ httpServer.listen(async () => {
 
   socket.disconnect().connect();
   await waitFor(socket, "connect");
+
+  socket.emit("foo", "hello");
+  await waitFor(socket, "bar");
+
+  socket.emit("foo", Buffer.allocUnsafe(1e6));
+  await waitFor(socket, "bar");
 
   // cleanup
   for (const id in cluster.workers) {
