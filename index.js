@@ -1,11 +1,15 @@
 const cluster = require("cluster");
 const { PassThrough } = require("stream");
-
+const getHeaders = (data) => {
+  const str = data.toString();
+  const marker = str.indexOf("\r\n\r\n");
+  const headers = str.slice(0, marker).toString();
+  return headers;
+};
 const isWebsocketRequest = (data) => {
-  const marker = data.indexOf("\r\n\r\n");
-  const headers = data.slice(0, marker).toString();
+  const headers = getHeaders(data);
   if (
-    /\?EIO=4&transport=(polling|websocket)/.exec(headers) ||
+    /GET.*\?EIO=4&transport=(websocket|polling)/.exec(headers) ||
     /^Upgrade: websocket$/m.exec(headers)
   ) {
     return true;
@@ -174,7 +178,6 @@ const setupWorker = (io) => {
         tunnel.contentLengthReceived = data.length;
         connections[connectionId] = tunnel;
         io.httpServer.emit("connection", tunnel); // inject connection
-        console.log(request, typeof data);
         tunnel.write(data);
         process.send(
           { type: "regularHttp:connection", data: null },
