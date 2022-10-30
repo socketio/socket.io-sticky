@@ -53,4 +53,13 @@ describe("@socket.io/sticky", () => {
       handler(done)
     );
   });
+
+  it("should work with WebSocket only", (done) => {
+    exec(fixture("connection.js"), { env: { TRANSPORT: "websocket" } }, done);
+  });
+
+
+  it.skip("should work with HTTP long-polling only", (done) => {
+    exec(fixture("connection.js"), { env: { TRANSPORT: "polling" } }, done);
+  });
 });

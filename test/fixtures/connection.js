@@ -19,7 +19,6 @@ if (cluster.isWorker) {
       socket.emit("large-bar", Buffer.allocUnsafe(1e6));
     });
   });
-
   return;
 }
 
@@ -53,15 +52,13 @@ httpServer.listen(async () => {
   try {
     const port = httpServer.address().port;
     console.log(`Listening on port ${port}`);
-
-    socket = ioc(`http://localhost:${port}`, {
-      transports: process.env.TRANSPORT
-        ? [process.env.TRANSPORT]
-        : ["polling", "websocket"],
+    const socket = ioc(`http://localhost:${port}`, {
+    transports: process.env.TRANSPORT
+       ? [process.env.TRANSPORT]
+       : ["polling", "websocket"],
     });
 
     await waitFor(socket, "connect");
-
     socket.disconnect().connect();
     await waitFor(socket, "connect");
     console.log("connected");
@@ -90,5 +87,6 @@ httpServer.listen(async () => {
     httpServer.close(() => {
       process.exit(exitCode);
     });
+
   }
 });
