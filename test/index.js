@@ -9,11 +9,10 @@ const fixture = (filename) => {
 };
 const handler = (done) => {
   return (error, stdOut, stdErr) => {
-    let result = null;
     if (error) {
-      result = `${stdOut}\n${stdErr}`;
+      console.log(`${stdOut}\n${stdErr}`);
     }
-    assert.strictEqual(result, null);
+    assert.strictEqual(error, null);
     done();
   };
 };

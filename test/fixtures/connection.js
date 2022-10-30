@@ -78,7 +78,7 @@ httpServer.listen(async () => {
     for (const id in cluster.workers) {
       cluster.workers[id].kill();
     }
-    console.log("workes killed");
+    console.log("workers killed");
   } catch (e) {
     console.log(e);
     exitCode = 1;
