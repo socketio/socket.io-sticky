@@ -101,6 +101,7 @@ const setupMaster = (httpServer, opts) => {
         { keepOpen: type !== "sticky:connection" },
         (err) => {
           if (err) {
+            console.error(err);
             socket.destroy();
           }
         }
@@ -171,36 +172,58 @@ const setupWorker = (io) => {
         break;
       }
       case "first-chunk": {
-        const request = data.toString();
-        const m = /content-length: (\d+)/im.exec(request);
+        const headers = getHeaders(data);
+        const m = /content-length: (\d+)/im.exec(headers);
         const tunnel = new PassThrough();
-        tunnel.contentLength = m ? +m[1] : 0;
-        tunnel.contentLengthReceived = data.length;
         connections[connectionId] = tunnel;
+        tunnel.contentLength = m ? +m[1] : 0;
+        tunnel.contentLengthReceived = -headers.length - 4;
+        tunnel.once("resume", () => {
+          tunnel.write(data);
+        });
         io.httpServer.emit("connection", tunnel); // inject connection
-        tunnel.write(data);
+
         process.send(
           { type: "regularHttp:connection", data: null },
           ignoreError
         );
-        tunnel.on("data", (d) => {
-          if (tunnel.contentLength > tunnel.contentLengthReceived) {
-            return;
-          }
-          // handle exception if client closed connection on his side
-          try {
-            if (socket) {
-              socket.write(d);
+        tunnel.on("readable", () => {
+          let data;
+          while ((data = tunnel.read()) !== null) {
+            if (tunnel.contentLength > tunnel.contentLengthReceived) {
+              tunnel.contentLengthReceived += data.length;
+              continue;
             }
-          } catch (e) {
-            log.debug("Error on socket write", e);
+            try {
+              if (socket) {
+                socket.write(data);
+              }
+            } catch (e) {
+              log.debug("Error on socket write", e);
+            }
           }
         });
-        tunnel.on("end", () => {
+        tunnel.on("close", (d) => {
+          try {
+            if (socket && !socket.destroyed) {
+              socket.end(() => {
+                socket.destroy();
+              });
+            }
+          } catch (e) {
+            log.debug("Error on socket close", e);
+          }
+          if (connections[connectionId]) {
+            delete connections[connectionId];
+          }
+        });
+        tunnel.on("end", (d) => {
           // handle exception if client closed connection on his side
           try {
             if (socket) {
-              socket.end();
+              socket.end(() => {
+                socket.destroy();
+              });
             }
           } catch (e) {
             log.debug("Error on socket close", e);
@@ -216,7 +239,6 @@ const setupWorker = (io) => {
       case "next-chunk": {
         const tunnel = connections[connectionId];
         tunnel.write(data);
-        tunnel.contentLengthReceived += data.length;
         break;
       }
     }
