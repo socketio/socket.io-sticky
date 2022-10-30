@@ -53,9 +53,9 @@ httpServer.listen(async () => {
     const port = httpServer.address().port;
     console.log(`Listening on port ${port}`);
     const socket = ioc(`http://localhost:${port}`, {
-    transports: process.env.TRANSPORT
-       ? [process.env.TRANSPORT]
-       : ["polling", "websocket"],
+      transports: process.env.TRANSPORT
+        ? [process.env.TRANSPORT]
+        : ["polling", "websocket"],
     });
 
     await waitFor(socket, "connect");
@@ -87,6 +87,5 @@ httpServer.listen(async () => {
     httpServer.close(() => {
       process.exit(exitCode);
     });
-
   }
 });
