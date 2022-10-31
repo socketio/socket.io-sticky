@@ -24,8 +24,7 @@ describe("@socket.io/sticky", () => {
     exec(fixture("connection.js"), { env: { TRANSPORT: "websocket" } }, done);
   });
 
-  // FIXME it fails when sending a packet whose size is over 65 kb
-  it.skip("should work with HTTP long-polling only", (done) => {
+  it("should work with HTTP long-polling only", (done) => {
     exec(fixture("connection.js"), { env: { TRANSPORT: "polling" } }, done);
   });
 });

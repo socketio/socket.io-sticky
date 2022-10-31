@@ -1,4 +1,7 @@
 const cluster = require("cluster");
+const { randomBytes } = require("crypto");
+
+const randomId = () => randomBytes(8).toString("hex");
 
 const setupMaster = (httpServer, opts) => {
   if (!cluster.isMaster) {
@@ -57,20 +60,48 @@ const setupMaster = (httpServer, opts) => {
   };
 
   httpServer.on("connection", (socket) => {
-    socket.once("data", (buffer) => {
-      socket.pause();
+    let workerId, connectionId;
+
+    const sendCallback = (err) => {
+      if (err) {
+        socket.destroy();
+      }
+    };
+
+    socket.on("data", (buffer) => {
       const data = buffer.toString();
-      const workerId = computeWorkerId(data);
+      if (workerId && connectionId) {
+        cluster.workers[workerId].send(
+          { type: "sticky:http-chunk", data, connectionId },
+          sendCallback
+        );
+        return;
+      }
+      workerId = computeWorkerId(data);
+      const mayHaveMultipleChunks = !(
+        data.startsWith("GET") ||
+        data
+          .substring(0, data.indexOf("\r\n\r\n"))
+          .includes("pgrade: websocket")
+      );
+      socket.pause();
+      if (mayHaveMultipleChunks) {
+        connectionId = randomId();
+      }
       cluster.workers[workerId].send(
-        { type: "sticky:connection", data },
+        { type: "sticky:connection", data, connectionId },
         socket,
-        (err) => {
-          if (err) {
-            socket.destroy();
-          }
-        }
+        {
+          keepOpen: mayHaveMultipleChunks,
+        },
+        sendCallback
       );
     });
+  });
+
+  // this is needed to properly detect the end of the HTTP request body
+  httpServer.on("request", (req) => {
+    req.on("data", () => {});
   });
 
   cluster.on("message", (worker, { type, data }) => {
@@ -96,7 +127,10 @@ const setupWorker = (io) => {
     throw new Error("not worker");
   }
 
-  process.on("message", ({ type, data }, socket) => {
+  // store connections that may receive multiple chunks
+  const sockets = new Map();
+
+  process.on("message", ({ type, data, connectionId }, socket) => {
     switch (type) {
       case "sticky:connection":
         if (!socket) {
@@ -105,15 +139,25 @@ const setupWorker = (io) => {
           return;
         }
         io.httpServer.emit("connection", socket); // inject connection
-        // republish first chunk
-        if (socket._handle.onread.length === 1) {
-          socket._handle.onread(Buffer.from(data));
-        } else {
-          // for Node.js < 12
-          socket._handle.onread(1, Buffer.from(data));
-        }
+        socket.emit("data", Buffer.from(data)); // republish first chunk
         socket.resume();
+
+        if (connectionId) {
+          sockets.set(connectionId, socket);
+
+          socket.on("close", () => {
+            sockets.delete(connectionId);
+          });
+        }
+
         break;
+
+      case "sticky:http-chunk": {
+        const socket = sockets.get(connectionId);
+        if (socket) {
+          socket.emit("data", Buffer.from(data));
+        }
+      }
     }
   });
 

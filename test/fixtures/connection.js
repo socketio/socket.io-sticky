@@ -6,7 +6,9 @@ const { setupMaster, setupWorker } = require("../..");
 
 if (cluster.isWorker) {
   const httpServer = http.createServer();
-  const io = new Server(httpServer);
+  const io = new Server(httpServer, {
+    maxHttpBufferSize: 1.4 * 1e6, // to account for the base64 encoding of the binary payload
+  });
   setupWorker(io);
 
   io.on("connection", (socket) => {
