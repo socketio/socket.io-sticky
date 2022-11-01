@@ -3,13 +3,15 @@
   "version": "1.0.1",
   "description": "An alternative to the sticky-session package (https://github.com/indutny/sticky-session)",
   "main": "index.js",
+  "types": "index.d.ts",
   "scripts": {
     "format:check": "prettier --check \"index.js\" \"test/**/*.js\"",
     "format:fix": "prettier --write \"index.js\" \"test/**/*.js\"",
     "test": "npm run format:check && nyc mocha --timeout 5000"
   },
   "files": [
-    "index.js"
+    "index.js",
+    "index.d.ts"
   ],
   "author": "Damien Arrachequesne <damien.arrachequesne@gmail.com>",
   "license": "MIT",
