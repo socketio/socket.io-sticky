@@ -1,3 +1,20 @@
+# History
+
+- [1.0.2](#102-2022-11-01) (Nov 2022)
+- [1.0.1](#101-2021-07-01) (Jul 2021)
+- [1.0.0](#100-2021-01-25) (Jan 2021)
+
+# Release notes
+
+## [1.0.2](https://github.com/socketio/socket.io-sticky/compare/1.0.1...1.0.2) (2022-11-01)
+
+
+### Bug Fixes
+
+* properly handle large request body ([a124d0b](https://github.com/socketio/socket.io-sticky/commit/a124d0beb5c1b78be5b75f10153859a9e4672862))
+
+
+
 ## [1.0.1](https://github.com/socketio/socket.io-sticky/compare/1.0.0...1.0.1) (2021-07-01)
 
 
