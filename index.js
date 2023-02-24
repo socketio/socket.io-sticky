@@ -3,6 +3,10 @@ const { randomBytes } = require("crypto");
 
 const randomId = () => randomBytes(8).toString("hex");
 
+function destroySocket() {
+  this.destroy();
+}
+
 const setupMaster = (httpServer, opts) => {
   if (!cluster.isMaster) {
     throw new Error("not master");
@@ -69,6 +73,21 @@ const setupMaster = (httpServer, opts) => {
     };
 
     socket.on("data", (buffer) => {
+      if (Object.keys(cluster.workers).length === 0) {
+        if (workerId) {
+          // the socket was already assigned to a worker, so we destroy it directly
+          socket.destroy();
+        } else {
+          socket.on("error", destroySocket);
+          socket.once("finish", destroySocket);
+
+          socket.end(`HTTP/1.1 503 Service Unavailable\r\n
+          Connection: 'close'\r\n
+          Content-Length: 0\r\n
+          \r\n`);
+        }
+        return;
+      }
       const data = buffer.toString();
       if (workerId && connectionId) {
         cluster.workers[workerId].send(
