@@ -43,8 +43,8 @@ describe("@socket.io/sticky", () => {
     exec(fixture("connection.js"), { env: { TRANSPORT: "polling" } }, done);
   });
 
-  it("should work with HTTP long-polling only", (done) => {
-    exec(fixture("connection.js"), { env: { TRANSPORT: "polling" } }, done);
+  it("should work with CORS", (done) => {
+    exec(fixture("cors.js"), done);
   });
 
   it("should return a 503 error when no worker is available (polling)", (done) => {

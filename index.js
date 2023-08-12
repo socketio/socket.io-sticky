@@ -97,13 +97,11 @@ const setupMaster = (httpServer, opts) => {
         return;
       }
       workerId = computeWorkerId(data);
-      const mayHaveMultipleChunks = !(
-        data.startsWith("GET") ||
-        data
-          .substring(0, data.indexOf("\r\n\r\n"))
-          .includes("pgrade: websocket")
-      );
-      socket.pause();
+
+      const head = data.substring(0, data.indexOf("\r\n\r\n")).toLowerCase();
+      const mayHaveMultipleChunks =
+        head.includes("content-length:") || head.includes("transfer-encoding:");
+
       if (mayHaveMultipleChunks) {
         connectionId = randomId();
       }
