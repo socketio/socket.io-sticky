@@ -1,11 +1,22 @@
 # History
 
+- [1.0.4](#104-2023-08-12) (Aug 2023)
 - [1.0.3](#103-2023-02-24) (Feb 2023)
 - [1.0.2](#102-2022-11-01) (Nov 2022)
 - [1.0.1](#101-2021-07-01) (Jul 2021)
 - [1.0.0](#100-2021-01-25) (Jan 2021)
 
 # Release notes
+
+## [1.0.4](https://github.com/socketio/socket.io-sticky/compare/1.0.3...1.0.4) (2023-08-12)
+
+
+### Bug Fixes
+
+* cleanup sid to worker map on worker exit ([4b430e7](https://github.com/socketio/socket.io-sticky/commit/4b430e7e9383006e4641e40e8a5082156ed862a4))
+* properly detect requests without body ([ac7bb8e](https://github.com/socketio/socket.io-sticky/commit/ac7bb8e851d6a458736281568ed6946c512e4251))
+
+
 
 ## [1.0.3](https://github.com/socketio/socket.io-sticky/compare/1.0.2...1.0.3) (2023-02-24)
 
