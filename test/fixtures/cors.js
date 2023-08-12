@@ -3,6 +3,7 @@ const { createServer, request } = require("http");
 const { Server } = require("socket.io");
 const { setupMaster, setupWorker } = require("../..");
 const assert = require("assert").strict;
+const { sendRequest } = require("./util");
 
 if (cluster.isWorker) {
   const httpServer = createServer();
@@ -65,7 +66,3 @@ httpServer.listen(async () => {
   }
   httpServer.close();
 });
-
-function sendRequest(options) {
-  return new Promise((resolve) => request(options, resolve).end());
-}
