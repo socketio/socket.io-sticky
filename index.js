@@ -137,6 +137,14 @@ const setupMaster = (httpServer, opts) => {
         break;
     }
   });
+
+  cluster.on("exit", (worker) => {
+    sessionIdToWorker.forEach((value, key) => {
+      if (value === worker.id) {
+        sessionIdToWorker.delete(key);
+      }
+    });
+  });
 };
 
 const setupWorker = (io) => {
