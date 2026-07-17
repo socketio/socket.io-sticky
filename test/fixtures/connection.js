@@ -45,6 +45,7 @@ httpServer.listen(async () => {
     transports: process.env.TRANSPORT
       ? [process.env.TRANSPORT]
       : ["polling", "websocket"],
+    reconnectionDelay: 10,
   });
 
   await waitFor(socket, "connect");

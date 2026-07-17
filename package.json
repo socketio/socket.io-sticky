@@ -7,7 +7,7 @@
   "scripts": {
     "format:check": "prettier --check \"index.js\" \"test/**/*.js\"",
     "format:fix": "prettier --write \"index.js\" \"test/**/*.js\"",
-    "test": "npm run format:check && nyc mocha --timeout 5000"
+    "test": "npm run format:check && nyc mocha"
   },
   "files": [
     "index.js",
