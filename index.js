@@ -98,7 +98,7 @@ const setupMaster = (httpServer, opts) => {
         }
         return;
       }
-      if (workerId && connectionId) {
+      if (workerId && cluster.workers[workerId] && connectionId) {
         debug(
           "forwarding chunk (chunk length: %d) to worker %s (connectionId: %s)",
           chunk.byteLength,
