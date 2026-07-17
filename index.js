@@ -9,8 +9,8 @@ function destroySocket() {
 }
 
 const setupMaster = (httpServer, opts) => {
-  if (!cluster.isMaster) {
-    throw new Error("not master");
+  if (!cluster.isPrimary) {
+    throw new Error("not primary");
   }
 
   const options = Object.assign(
@@ -246,6 +246,7 @@ const setupWorker = (io) => {
 };
 
 module.exports = {
-  setupMaster,
+  setupPrimary: setupMaster,
+  setupMaster, // kept for backward compatibility
   setupWorker,
 };

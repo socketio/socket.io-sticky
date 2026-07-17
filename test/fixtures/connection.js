@@ -2,7 +2,7 @@ const cluster = require("cluster");
 const http = require("http");
 const { Server } = require("socket.io");
 const ioc = require("socket.io-client");
-const { setupMaster, setupWorker } = require("../..");
+const { setupPrimary, setupWorker } = require("../..");
 
 if (cluster.isWorker) {
   const httpServer = http.createServer();
@@ -20,7 +20,7 @@ if (cluster.isWorker) {
   return;
 }
 
-cluster.setupMaster({
+cluster.setupPrimary({
   serialization: "advanced", // prevents conversion of Node.js Buffer to string over IPC
 });
 
@@ -32,7 +32,7 @@ for (let i = 0; i < WORKER_COUNT; i++) {
 
 const httpServer = http.createServer();
 
-setupMaster(httpServer, {
+setupPrimary(httpServer, {
   loadBalancingMethod: process.env.LB_METHOD || "least-connection",
 });
 

@@ -1,7 +1,7 @@
 const { join } = require("path");
 const { exec } = require("child_process");
 const { createServer } = require("http");
-const { setupMaster } = require("../index");
+const { setupPrimary } = require("../index");
 const ioc = require("socket.io-client");
 
 const fixture = (filename) => {
@@ -50,7 +50,7 @@ describe("@socket.io/sticky", () => {
   it("should return a 503 error when no worker is available (polling)", (done) => {
     const httpServer = createServer();
 
-    setupMaster(httpServer, {
+    setupPrimary(httpServer, {
       loadBalancingMethod: "least-connection",
     });
 
@@ -70,7 +70,7 @@ describe("@socket.io/sticky", () => {
   it("should return a 503 error when no worker is available (websocket)", (done) => {
     const httpServer = createServer();
 
-    setupMaster(httpServer, {
+    setupPrimary(httpServer, {
       loadBalancingMethod: "least-connection",
     });
 
