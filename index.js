@@ -46,11 +46,8 @@ const setupMaster = (httpServer, opts) => {
       }
       case "round-robin": {
         const workerIds = Object.keys(cluster.workers);
-        currentIndex++;
-        if (currentIndex >= workerIds.length) {
-          currentIndex = 0;
-        }
-        const workerId = workerIds[currentIndex];
+        const workerId = workerIds[currentIndex % workerIds.length];
+        currentIndex = (currentIndex + 1) % workerIds.length;
         debug("round-robin selected worker %s", workerId);
         return workerId;
       }
