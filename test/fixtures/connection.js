@@ -20,6 +20,10 @@ if (cluster.isWorker) {
   return;
 }
 
+cluster.setupMaster({
+  serialization: "advanced", // prevents conversion of Node.js Buffer to string over IPC
+});
+
 const WORKER_COUNT = 3;
 
 for (let i = 0; i < WORKER_COUNT; i++) {

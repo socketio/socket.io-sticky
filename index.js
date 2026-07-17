@@ -82,7 +82,7 @@ const setupMaster = (httpServer, opts) => {
       }
     };
 
-    socket.on("data", (buffer) => {
+    socket.on("data", (chunk) => {
       if (Object.keys(cluster.workers).length === 0) {
         debug("no workers available, destroying socket");
         if (workerId) {
@@ -99,23 +99,25 @@ const setupMaster = (httpServer, opts) => {
         }
         return;
       }
-      const data = buffer.toString();
       if (workerId && connectionId) {
         debug(
-          "forwarding chunk (length: %d) to worker %s (connectionId: %s)",
-          data.length,
+          "forwarding chunk (chunk length: %d) to worker %s (connectionId: %s)",
+          chunk.byteLength,
           workerId,
           connectionId
         );
         cluster.workers[workerId].send(
-          { type: "sticky:http-chunk", data, connectionId },
+          { type: "sticky:http-chunk", chunk, connectionId },
           sendCallback
         );
         return;
       }
-      workerId = computeWorkerId(data);
+      const header = chunk.toString();
+      workerId = computeWorkerId(header);
 
-      const head = data.substring(0, data.indexOf("\r\n\r\n")).toLowerCase();
+      const head = header
+        .substring(0, header.indexOf("\r\n\r\n"))
+        .toLowerCase();
       const mayHaveMultipleChunks =
         head.includes("content-length:") || head.includes("transfer-encoding:");
 
@@ -124,12 +126,12 @@ const setupMaster = (httpServer, opts) => {
       }
       debug(
         "forwarding connection (chunk length: %d) to worker %s (connectionId: %s)",
-        data.length,
+        chunk.byteLength,
         workerId,
         connectionId
       );
       cluster.workers[workerId].send(
-        { type: "sticky:connection", data, connectionId },
+        { type: "sticky:connection", chunk, connectionId },
         socket,
         {
           keepOpen: mayHaveMultipleChunks,
@@ -141,7 +143,7 @@ const setupMaster = (httpServer, opts) => {
 
   // this is needed to properly detect the end of the HTTP request body
   httpServer.on("request", (req) => {
-    req.on("data", () => {});
+    req.resume();
   });
 
   cluster.on("message", (worker, { type, data }) => {
@@ -186,7 +188,7 @@ const setupWorker = (io) => {
   // store connections that may receive multiple chunks
   const sockets = new Map();
 
-  process.on("message", ({ type, data, connectionId }, socket) => {
+  process.on("message", ({ type, chunk, connectionId }, socket) => {
     switch (type) {
       case "sticky:connection":
         if (!socket) {
@@ -202,7 +204,7 @@ const setupWorker = (io) => {
           connectionId
         );
         io.httpServer.emit("connection", socket); // inject connection
-        socket.emit("data", Buffer.from(data)); // republish first chunk
+        socket.unshift(chunk); // republish first chunk
         socket.resume();
 
         if (connectionId) {
@@ -219,7 +221,7 @@ const setupWorker = (io) => {
         const socket = sockets.get(connectionId);
         if (socket) {
           debug("received chunk for connection %s", connectionId);
-          socket.emit("data", Buffer.from(data));
+          socket.unshift(chunk);
         } else {
           debug("received chunk for unknown connection %s", connectionId);
         }
