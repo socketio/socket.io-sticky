@@ -86,4 +86,8 @@ describe("@socket.io/sticky", () => {
       success(done, httpServer, socket);
     });
   });
+
+  it("should disable HTTP keep-alive", (done) => {
+    exec(fixture("keep-alive.js"), done);
+  });
 });

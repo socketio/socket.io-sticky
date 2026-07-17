@@ -70,8 +70,7 @@ httpServer.listen(async () => {
     "40"
   );
 
-  // FIXME "session ID unknown"
-  assert.equal(res3.statusCode, 400);
+  assert.equal(res3.statusCode, 200);
 
   // cleanup
   for (const id in cluster.workers) {

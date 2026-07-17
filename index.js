@@ -178,6 +178,11 @@ const setupWorker = (io) => {
     throw new Error("not worker");
   }
 
+  io.httpServer.prependListener("request", (req, res) => {
+    // disable HTTP keep-alive to prevent connection reuse for another session
+    res.setHeader("Connection", "close");
+  });
+
   // store connections that may receive multiple chunks
   const sockets = new Map();
 
