@@ -89,10 +89,12 @@ const setupMaster = (httpServer, opts) => {
           socket.on("error", destroySocket);
           socket.once("finish", destroySocket);
 
-          socket.end(`HTTP/1.1 503 Service Unavailable\r\n
-          Connection: 'close'\r\n
-          Content-Length: 0\r\n
-          \r\n`);
+          socket.end(
+            "HTTP/1.1 503 Service Unavailable\r\n" +
+              "Connection: close\r\n" +
+              "Content-Length: 0\r\n" +
+              "\r\n"
+          );
         }
         return;
       }
