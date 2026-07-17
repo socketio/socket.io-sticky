@@ -90,4 +90,8 @@ describe("@socket.io/sticky", () => {
   it("should disable HTTP keep-alive", (done) => {
     exec(fixture("keep-alive.js"), done);
   });
+
+  it("should work with file upload", (done) => {
+    exec(fixture("upload.js"), done);
+  });
 });
