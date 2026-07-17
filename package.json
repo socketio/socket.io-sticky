@@ -20,6 +20,9 @@
     "url": "git+https://github.com/socketio/socket.io-sticky.git"
   },
   "homepage": "https://github.com/socketio/socket.io-sticky#readme",
+  "dependencies": {
+    "debug": "~4.4.3"
+  },
   "devDependencies": {
     "mocha": "^8.2.1",
     "nyc": "^15.1.0",

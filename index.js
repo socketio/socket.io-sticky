@@ -1,5 +1,6 @@
 const cluster = require("cluster");
 const { randomBytes } = require("crypto");
+const debug = require("debug")("socket.io-sticky");
 
 const randomId = () => randomBytes(8).toString("hex");
 
@@ -19,6 +20,8 @@ const setupMaster = (httpServer, opts) => {
     opts
   );
 
+  debug("setting up primary with options %o", options);
+
   const sessionIdToWorker = new Map();
   const sidRegex = /sid=([\w\-]{20})/;
   let currentIndex = 0; // for round-robin load balancing
@@ -29,13 +32,17 @@ const setupMaster = (httpServer, opts) => {
       const sid = match[1];
       const workerId = sessionIdToWorker.get(sid);
       if (workerId && cluster.workers[workerId]) {
+        debug("sid %s matched to worker %s", sid, workerId);
         return workerId;
       }
     }
     switch (options.loadBalancingMethod) {
       case "random": {
         const workerIds = Object.keys(cluster.workers);
-        return workerIds[Math.floor(Math.random() * workerIds.length)];
+        const workerId =
+          workerIds[Math.floor(Math.random() * workerIds.length)];
+        debug("randomly selected worker %s", workerId);
+        return workerId;
       }
       case "round-robin": {
         const workerIds = Object.keys(cluster.workers);
@@ -43,7 +50,9 @@ const setupMaster = (httpServer, opts) => {
         if (currentIndex >= workerIds.length) {
           currentIndex = 0;
         }
-        return workerIds[currentIndex];
+        const workerId = workerIds[currentIndex];
+        debug("round-robin selected worker %s", workerId);
+        return workerId;
       }
       case "least-connection":
         let leastActiveWorker;
@@ -59,6 +68,7 @@ const setupMaster = (httpServer, opts) => {
             }
           }
         }
+        debug("least-connection selected worker %s", leastActiveWorker.id);
         return leastActiveWorker.id;
     }
   };
@@ -74,6 +84,7 @@ const setupMaster = (httpServer, opts) => {
 
     socket.on("data", (buffer) => {
       if (Object.keys(cluster.workers).length === 0) {
+        debug("no workers available, destroying socket");
         if (workerId) {
           // the socket was already assigned to a worker, so we destroy it directly
           socket.destroy();
@@ -90,6 +101,12 @@ const setupMaster = (httpServer, opts) => {
       }
       const data = buffer.toString();
       if (workerId && connectionId) {
+        debug(
+          "forwarding chunk (length: %d) to worker %s (connectionId: %s)",
+          data.length,
+          workerId,
+          connectionId
+        );
         cluster.workers[workerId].send(
           { type: "sticky:http-chunk", data, connectionId },
           sendCallback
@@ -105,6 +122,12 @@ const setupMaster = (httpServer, opts) => {
       if (mayHaveMultipleChunks) {
         connectionId = randomId();
       }
+      debug(
+        "forwarding connection (chunk length: %d) to worker %s (connectionId: %s)",
+        data.length,
+        workerId,
+        connectionId
+      );
       cluster.workers[workerId].send(
         { type: "sticky:connection", data, connectionId },
         socket,
@@ -124,12 +147,14 @@ const setupMaster = (httpServer, opts) => {
   cluster.on("message", (worker, { type, data }) => {
     switch (type) {
       case "sticky:connection":
+        debug("session %s bound to worker %s", data, worker.id);
         sessionIdToWorker.set(data, worker.id);
         if (options.loadBalancingMethod === "least-connection") {
           worker.clientsCount = (worker.clientsCount || 0) + 1;
         }
         break;
       case "sticky:disconnection":
+        debug("session %s unbound from worker %s", data, worker.id);
         sessionIdToWorker.delete(data);
         if (options.loadBalancingMethod === "least-connection") {
           worker.clientsCount--;
@@ -139,6 +164,7 @@ const setupMaster = (httpServer, opts) => {
   });
 
   cluster.on("exit", (worker) => {
+    debug("worker %s exited, cleaning up sessions", worker.id);
     sessionIdToWorker.forEach((value, key) => {
       if (value === worker.id) {
         sessionIdToWorker.delete(key);
@@ -159,10 +185,17 @@ const setupWorker = (io) => {
     switch (type) {
       case "sticky:connection":
         if (!socket) {
+          debug(
+            "ignoring connection from primary because the socket is closed"
+          );
           // might happen if the socket is closed during the transfer to the worker
           // see https://nodejs.org/api/child_process.html#child_process_example_sending_a_socket_object
           return;
         }
+        debug(
+          "received connection from primary (connectionId: %s)",
+          connectionId
+        );
         io.httpServer.emit("connection", socket); // inject connection
         socket.emit("data", Buffer.from(data)); // republish first chunk
         socket.resume();
@@ -180,8 +213,12 @@ const setupWorker = (io) => {
       case "sticky:http-chunk": {
         const socket = sockets.get(connectionId);
         if (socket) {
+          debug("received chunk for connection %s", connectionId);
           socket.emit("data", Buffer.from(data));
+        } else {
+          debug("received chunk for unknown connection %s", connectionId);
         }
+        break;
       }
     }
   });
@@ -189,9 +226,11 @@ const setupWorker = (io) => {
   const ignoreError = () => {}; // the next request will fail anyway
 
   io.engine.on("connection", (socket) => {
+    debug("new connection %s", socket.id);
     process.send({ type: "sticky:connection", data: socket.id }, ignoreError);
 
     socket.once("close", () => {
+      debug("connection %s closed", socket.id);
       process.send(
         { type: "sticky:disconnection", data: socket.id },
         ignoreError
