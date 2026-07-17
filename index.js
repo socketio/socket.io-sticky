@@ -107,7 +107,7 @@ const setupMaster = (httpServer, opts) => {
           connectionId
         );
         cluster.workers[workerId].send(
-          { type: "sticky:http-chunk", chunk, connectionId },
+          { type: "sticky:http-chunk", data: chunk, connectionId },
           sendCallback
         );
         return;
@@ -131,7 +131,7 @@ const setupMaster = (httpServer, opts) => {
         connectionId
       );
       cluster.workers[workerId].send(
-        { type: "sticky:connection", chunk, connectionId },
+        { type: "sticky:connection", data: chunk, connectionId },
         socket,
         {
           keepOpen: mayHaveMultipleChunks,
@@ -188,7 +188,7 @@ const setupWorker = (io) => {
   // store connections that may receive multiple chunks
   const sockets = new Map();
 
-  process.on("message", ({ type, chunk, connectionId }, socket) => {
+  process.on("message", ({ type, data, connectionId }, socket) => {
     switch (type) {
       case "sticky:connection":
         if (!socket) {
@@ -204,7 +204,7 @@ const setupWorker = (io) => {
           connectionId
         );
         io.httpServer.emit("connection", socket); // inject connection
-        socket.unshift(chunk); // republish first chunk
+        socket.unshift(data); // republish first chunk
         socket.resume();
 
         if (connectionId) {
@@ -221,7 +221,7 @@ const setupWorker = (io) => {
         const socket = sockets.get(connectionId);
         if (socket) {
           debug("received chunk for connection %s", connectionId);
-          socket.unshift(chunk);
+          socket.unshift(data);
         } else {
           debug("received chunk for unknown connection %s", connectionId);
         }
