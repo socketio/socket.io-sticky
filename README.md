@@ -48,6 +48,10 @@ if (cluster.isMaster) {
 
   httpServer.listen(3000);
 
+  cluster.setupPrimary({
+    serialization: "advanced", // prevents conversion of Node.js Buffer to string over IPC
+  });
+
   for (let i = 0; i < numCPUs; i++) {
     cluster.fork();
   }

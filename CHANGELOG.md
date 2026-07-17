@@ -1,12 +1,42 @@
-# History
+# Changelog
 
-- [1.0.4](#104-2023-08-12) (Aug 2023)
-- [1.0.3](#103-2023-02-24) (Feb 2023)
-- [1.0.2](#102-2022-11-01) (Nov 2022)
-- [1.0.1](#101-2021-07-01) (Jul 2021)
-- [1.0.0](#100-2021-01-25) (Jan 2021)
+| Version                  | Release date  |
+|--------------------------|---------------|
+| [2.0.0](#200-2026-07-17) | July 2026     |
+| [1.0.4](#104-2023-08-12) | August 2023   |
+| [1.0.3](#103-2023-02-24) | February 2023 |
+| [1.0.2](#102-2022-11-01) | November 2022 |
+| [1.0.1](#101-2021-07-01) | July 2021     |
+| [1.0.0](#100-2021-01-25) | January 2021  |
 
-# Release notes
+# [2.0.0](https://github.com/socketio/socket.io-sticky/compare/1.0.4...2.0.0) (2026-07-17)
+
+
+### Bug Fixes
+
+* correct round-robin worker selection ([7443e1d](https://github.com/socketio/socket.io-sticky/commit/7443e1d8f2dc0c8bd1d3c6e8abca8f226c7a7b51))
+* disable HTTP keep-alive for sticky workers ([efd3445](https://github.com/socketio/socket.io-sticky/commit/efd34457f84077848e951c96cd62c3e3553c7646))
+* handle worker exit while forwarding upload chunks ([1ee559f](https://github.com/socketio/socket.io-sticky/commit/1ee559f13f5df3df3cf007e5044d6b793d9de3df))
+* preserve binary chunks when forwarding requests to workers ([05bff84](https://github.com/socketio/socket.io-sticky/commit/05bff84b7f89b6741502f1e7c6c35ad7481ae4a5))
+
+
+### BREAKING CHANGES
+
+* cluster IPC must use advanced serialization, so Buffers are preserved across
+  processes. Applications should configure the cluster primary with serialization: "advanced" before
+  forking workers.
+
+```js
+// must run before cluster.fork()
+
+cluster.setupPrimary({
+  serialization: "advanced", // prevents conversion of Node.js Buffer to string over IPC
+});
+```
+
+Reference: https://nodejs.org/docs/latest/api/child_process.html#advanced-serialization
+
+
 
 ## [1.0.4](https://github.com/socketio/socket.io-sticky/compare/1.0.3...1.0.4) (2023-08-12)
 
