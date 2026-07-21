@@ -1,11 +1,31 @@
 const cluster = require("cluster");
-const { randomBytes } = require("crypto");
 const debug = require("debug")("socket.io-sticky");
-
-const randomId = () => randomBytes(8).toString("hex");
 
 function destroySocket() {
   this.destroy();
+}
+
+function closeSocket(socket, httpStatus) {
+  socket.on("error", destroySocket);
+  socket.once("finish", destroySocket);
+
+  socket.end(
+    "HTTP/1.1 " +
+      httpStatus +
+      "\r\n" +
+      "Connection: close\r\n" +
+      "Content-Length: 0\r\n" +
+      "\r\n"
+  );
+}
+
+function getContentLength(header) {
+  const match = /content-length:\s*(\d+)/i.exec(header);
+  return match ? parseInt(match[1], 10) : 0;
+}
+
+function hasTransferEncoding(header) {
+  return /transfer-encoding:/i.test(header);
 }
 
 const setupMaster = (httpServer, opts) => {
@@ -16,6 +36,7 @@ const setupMaster = (httpServer, opts) => {
   const options = Object.assign(
     {
       loadBalancingMethod: "least-connection", // either "random", "round-robin" or "least-connection"
+      maxHttpBufferSize: 1e6,
     },
     opts
   );
@@ -71,12 +92,38 @@ const setupMaster = (httpServer, opts) => {
   };
 
   httpServer.on("connection", (socket) => {
-    let workerId, connectionId;
+    let workerId;
+    let chunks = [];
+    let totalLength = 0;
+    let expectedLength;
+    let buffering = false;
+    let forwarded = false;
 
     const sendCallback = (err) => {
       if (err) {
         socket.destroy();
       }
+    };
+
+    const forward = (data) => {
+      if (forwarded) {
+        return;
+      }
+
+      const worker = cluster.workers[workerId];
+
+      if (!worker) {
+        debug("worker %s not available, destroying socket", workerId);
+        closeSocket(socket, "503 Service Unavailable");
+        return;
+      }
+
+      forwarded = true;
+      socket.removeAllListeners("data");
+
+      debug("forwarding connection to worker %s", workerId);
+
+      worker.send({ type: "sticky:connection", data }, socket, sendCallback);
     };
 
     socket.on("data", (chunk) => {
@@ -86,63 +133,66 @@ const setupMaster = (httpServer, opts) => {
           // the socket was already assigned to a worker, so we destroy it directly
           socket.destroy();
         } else {
-          socket.on("error", destroySocket);
-          socket.once("finish", destroySocket);
-
-          socket.end(
-            "HTTP/1.1 503 Service Unavailable\r\n" +
-              "Connection: close\r\n" +
-              "Content-Length: 0\r\n" +
-              "\r\n"
-          );
+          closeSocket(socket, "503 Service Unavailable");
         }
         return;
       }
-      if (workerId && cluster.workers[workerId] && connectionId) {
-        debug(
-          "forwarding chunk (chunk length: %d) to worker %s (connectionId: %s)",
-          chunk.byteLength,
-          workerId,
-          connectionId
-        );
-        cluster.workers[workerId].send(
-          { type: "sticky:http-chunk", data: chunk, connectionId },
-          sendCallback
-        );
+
+      chunks.push(chunk);
+      totalLength += chunk.byteLength;
+
+      if (totalLength > options.maxHttpBufferSize) {
+        closeSocket(socket, "413 Payload Too Large");
         return;
       }
-      const header = chunk.toString();
-      workerId = computeWorkerId(header);
 
-      const head = header
-        .substring(0, header.indexOf("\r\n\r\n"))
-        .toLowerCase();
-      const mayHaveMultipleChunks =
-        head.includes("content-length:") || head.includes("transfer-encoding:");
+      if (!workerId) {
+        const buffer = Buffer.concat(chunks, totalLength);
+        const i = buffer.indexOf("\r\n\r\n");
 
-      if (mayHaveMultipleChunks) {
-        connectionId = randomId();
+        if (i === -1) {
+          return;
+        }
+
+        const headerLength = i + 4;
+        const header = buffer.subarray(0, headerLength).toString();
+        workerId = computeWorkerId(header);
+
+        const contentLength = getContentLength(header);
+        const mayHaveBody = contentLength > 0 || hasTransferEncoding(header);
+
+        if (!mayHaveBody) {
+          forward(buffer);
+          return;
+        }
+
+        buffering = true;
+
+        if (contentLength > 0) {
+          expectedLength = headerLength + contentLength;
+        }
       }
-      debug(
-        "forwarding connection (chunk length: %d) to worker %s (connectionId: %s)",
-        chunk.byteLength,
-        workerId,
-        connectionId
-      );
-      cluster.workers[workerId].send(
-        { type: "sticky:connection", data: chunk, connectionId },
-        socket,
-        {
-          keepOpen: mayHaveMultipleChunks,
-        },
-        sendCallback
-      );
-    });
-  });
 
-  // this is needed to properly detect the end of the HTTP request body
-  httpServer.on("request", (req) => {
-    req.resume();
+      if (buffering && expectedLength && totalLength >= expectedLength) {
+        forward(Buffer.concat(chunks, totalLength));
+      }
+
+      if (buffering && !expectedLength) {
+        // chunked trailer part is not supported
+        const isLastChunk = chunk
+          .subarray(chunk.byteLength - 5)
+          .toString()
+          .endsWith("0\r\n\r\n");
+
+        if (isLastChunk) {
+          forward(Buffer.concat(chunks, totalLength));
+        }
+      }
+
+      if (!forwarded) {
+        socket.resume();
+      }
+    });
   });
 
   cluster.on("message", (worker, { type, data }) => {
@@ -184,10 +234,7 @@ const setupWorker = (io) => {
     res.setHeader("Connection", "close");
   });
 
-  // store connections that may receive multiple chunks
-  const sockets = new Map();
-
-  process.on("message", ({ type, data, connectionId }, socket) => {
+  process.on("message", ({ type, data }, socket) => {
     switch (type) {
       case "sticky:connection":
         if (!socket) {
@@ -199,33 +246,13 @@ const setupWorker = (io) => {
           return;
         }
         debug(
-          "received connection from primary (connectionId: %s)",
-          connectionId
+          "received connection from primary (byteLength: %d)",
+          data.byteLength
         );
+        socket.unshift(data); // republish complete buffer
         io.httpServer.emit("connection", socket); // inject connection
-        socket.unshift(data); // republish first chunk
-        socket.resume();
-
-        if (connectionId) {
-          sockets.set(connectionId, socket);
-
-          socket.on("close", () => {
-            sockets.delete(connectionId);
-          });
-        }
 
         break;
-
-      case "sticky:http-chunk": {
-        const socket = sockets.get(connectionId);
-        if (socket) {
-          debug("received chunk for connection %s", connectionId);
-          socket.unshift(data);
-        } else {
-          debug("received chunk for unknown connection %s", connectionId);
-        }
-        break;
-      }
     }
   });
 

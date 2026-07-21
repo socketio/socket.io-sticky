@@ -34,6 +34,7 @@ const httpServer = http.createServer();
 
 setupPrimary(httpServer, {
   loadBalancingMethod: process.env.LB_METHOD || "least-connection",
+  maxHttpBufferSize: 1e7,
 });
 
 const waitFor = (emitter, event) => {
