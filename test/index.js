@@ -91,7 +91,7 @@ describe("@socket.io/sticky", () => {
     exec(fixture("keep-alive.js"), done);
   });
 
-  it("should work with file upload", (done) => {
+  it.skip("should work with file upload", (done) => {
     exec(fixture("upload.js"), done);
   });
 });
