@@ -1,5 +1,6 @@
 const cluster = require("cluster");
 const { randomBytes } = require("crypto");
+const { Duplex } = require("stream");
 const debug = require("debug")("socket.io-sticky");
 
 const randomId = () => randomBytes(8).toString("hex");
@@ -23,6 +24,7 @@ const setupMaster = (httpServer, opts) => {
   debug("setting up primary with options %o", options);
 
   const sessionIdToWorker = new Map();
+  const sockets = new Map();
   const sidRegex = /sid=([\w\-]{20})/;
   let currentIndex = 0; // for round-robin load balancing
 
@@ -79,6 +81,8 @@ const setupMaster = (httpServer, opts) => {
       }
     };
 
+    socket.removeAllListeners("data");
+
     socket.on("data", (chunk) => {
       if (Object.keys(cluster.workers).length === 0) {
         debug("no workers available, destroying socket");
@@ -111,18 +115,44 @@ const setupMaster = (httpServer, opts) => {
         );
         return;
       }
-      const header = chunk.toString();
+
+      const header = chunk
+        .subarray(0, chunk.indexOf(Buffer.from("\r\n\r\n")))
+        .toString();
+
       workerId = computeWorkerId(header);
 
-      const head = header
-        .substring(0, header.indexOf("\r\n\r\n"))
-        .toLowerCase();
+      const lowHeader = header.toLowerCase();
       const mayHaveMultipleChunks =
-        head.includes("content-length:") || head.includes("transfer-encoding:");
+        lowHeader.includes("content-length:") ||
+        lowHeader.includes("transfer-encoding:");
 
-      if (mayHaveMultipleChunks) {
-        connectionId = randomId();
+      // If the full request is not contained in the first chunk, the primary must
+      // keep ownership of the real socket and forward next chunks over IPC.
+      // Sending the socket handle to the worker in that case would let both the
+      // primary and the worker read from the same stream, so request bytes could be
+      // split unpredictably between the two processes. Instead, the worker receives
+      // a FakeSocket whose readable side is fed explicitly by IPC chunks.
+      if (!mayHaveMultipleChunks) {
+        debug(
+          "forwarding connection (chunk length: %d) to worker %s",
+          chunk.byteLength,
+          workerId
+        );
+
+        cluster.workers[workerId].send(
+          {
+            type: "sticky:connection",
+            data: chunk,
+          },
+          socket,
+          sendCallback
+        );
+        return;
       }
+
+      connectionId = randomId();
+      sockets.set(connectionId, socket);
       debug(
         "forwarding connection (chunk length: %d) to worker %s (connectionId: %s)",
         chunk.byteLength,
@@ -130,23 +160,64 @@ const setupMaster = (httpServer, opts) => {
         connectionId
       );
       cluster.workers[workerId].send(
-        { type: "sticky:connection", data: chunk, connectionId },
-        socket,
         {
-          keepOpen: mayHaveMultipleChunks,
+          type: "sticky:http-chunk-start",
+          data: chunk,
+          connectionId,
+          socketInfo: {
+            remoteAddress: socket.remoteAddress,
+            remotePort: socket.remotePort,
+            localAddress: socket.localAddress,
+            localPort: socket.localPort,
+          },
         },
         sendCallback
       );
     });
+
+    socket.on("close", () => {
+      if (connectionId && sockets.has(connectionId)) {
+        sockets.delete(connectionId);
+
+        if (workerId && cluster.workers[workerId]) {
+          cluster.workers[workerId].send({
+            type: "sticky:abort",
+            connectionId,
+          });
+        }
+      }
+    });
   });
 
-  // this is needed to properly detect the end of the HTTP request body
-  httpServer.on("request", (req) => {
-    req.resume();
-  });
-
-  cluster.on("message", (worker, { type, data }) => {
+  cluster.on("message", (worker, message) => {
+    const { type, data } = message;
     switch (type) {
+      case "sticky:http-response": {
+        const { connectionId } = message;
+        const socket = sockets.get(connectionId);
+        if (socket && !socket.destroyed) {
+          socket.write(data);
+        }
+        break;
+      }
+      case "sticky:http-response-end": {
+        const { connectionId } = message;
+        const socket = sockets.get(connectionId);
+        if (socket && !socket.destroyed) {
+          socket.end();
+        }
+        sockets.delete(connectionId);
+        break;
+      }
+      case "sticky:http-response-destroy": {
+        const { connectionId, error } = message;
+        const socket = sockets.get(connectionId);
+        if (socket && !socket.destroyed) {
+          socket.destroy(error ? new Error(error) : undefined);
+        }
+        sockets.delete(connectionId);
+        break;
+      }
       case "sticky:connection":
         debug("session %s bound to worker %s", data, worker.id);
         sessionIdToWorker.set(data, worker.id);
@@ -174,6 +245,131 @@ const setupMaster = (httpServer, opts) => {
   });
 };
 
+class FakeSocket extends Duplex {
+  constructor(socketInfo, connectionId) {
+    super({
+      allowHalfOpen: true,
+    });
+
+    this.connectionId = connectionId;
+    this.remoteAddress = socketInfo.remoteAddress;
+    this.remotePort = socketInfo.remotePort;
+    this.localAddress = socketInfo.localAddress;
+    this.localPort = socketInfo.localPort;
+  }
+
+  _read(size) {}
+
+  _write(chunk, encoding, callback) {
+    if (!process.connected) {
+      callback();
+      return;
+    }
+
+    process.send(
+      {
+        type: "sticky:http-response",
+        data: chunk,
+        connectionId: this.connectionId,
+      },
+      callback
+    );
+  }
+
+  _final(callback) {
+    if (!process.connected) {
+      callback();
+      return;
+    }
+
+    process.send(
+      {
+        type: "sticky:http-response-end",
+        connectionId: this.connectionId,
+      },
+      callback
+    );
+  }
+
+  _destroy(err, callback) {
+    if (this._aborted) {
+      callback();
+      return;
+    }
+
+    if (!process.connected) {
+      callback(err);
+      return;
+    }
+
+    process.send(
+      {
+        type: "sticky:http-response-destroy",
+        connectionId: this.connectionId,
+        error: err && err.message,
+      },
+      () => callback(err)
+    );
+  }
+
+  addChunk(chunk) {
+    if (this.destroyed || this.readableEnded) {
+      return;
+    }
+
+    this.push(chunk);
+  }
+
+  abort() {
+    this._aborted = true;
+    this.destroy(new Error("client connection closed"));
+  }
+
+  destroySoon() {
+    this.end();
+  }
+
+  cork() {
+    return this;
+  }
+
+  uncork() {
+    return this;
+  }
+
+  setTimeout(timeout, callback) {
+    if (callback) {
+      this.once("timeout", callback);
+    }
+
+    return this;
+  }
+
+  setNoDelay() {
+    return this;
+  }
+
+  setKeepAlive() {
+    return this;
+  }
+
+  address() {
+    return {
+      family: "IPv4",
+      address: this.localAddress,
+      port: this.localPort,
+    };
+  }
+
+  ref() {
+    return this;
+  }
+
+  unref() {
+    return this;
+  }
+}
+
 const setupWorker = (io) => {
   if (!cluster.isWorker) {
     throw new Error("not worker");
@@ -187,7 +383,8 @@ const setupWorker = (io) => {
   // store connections that may receive multiple chunks
   const sockets = new Map();
 
-  process.on("message", ({ type, data, connectionId }, socket) => {
+  process.on("message", (message, socket) => {
+    const { type, data } = message;
     switch (type) {
       case "sticky:connection":
         if (!socket) {
@@ -198,31 +395,45 @@ const setupWorker = (io) => {
           // see https://nodejs.org/api/child_process.html#child_process_example_sending_a_socket_object
           return;
         }
-        debug(
-          "received connection from primary (connectionId: %s)",
-          connectionId
-        );
+        debug("received connection from primary");
+
         io.httpServer.emit("connection", socket); // inject connection
         socket.unshift(data); // republish first chunk
-        socket.resume();
-
-        if (connectionId) {
-          sockets.set(connectionId, socket);
-
-          socket.on("close", () => {
-            sockets.delete(connectionId);
-          });
-        }
-
         break;
 
+      case "sticky:http-chunk-start": {
+        const { socketInfo, connectionId } = message;
+
+        debug("received first chunk for connection %s", connectionId);
+        const fakeSocket = new FakeSocket(socketInfo, connectionId);
+
+        fakeSocket.once("close", () => {
+          sockets.delete(connectionId);
+        });
+
+        io.httpServer.emit("connection", fakeSocket); // inject connection
+        fakeSocket.addChunk(data); // republish first chunk
+        sockets.set(connectionId, fakeSocket);
+        break;
+      }
+
       case "sticky:http-chunk": {
+        const { connectionId } = message;
         const socket = sockets.get(connectionId);
         if (socket) {
           debug("received chunk for connection %s", connectionId);
-          socket.unshift(data);
+          socket.addChunk(data);
         } else {
           debug("received chunk for unknown connection %s", connectionId);
+        }
+        break;
+      }
+
+      case "sticky:abort": {
+        const { connectionId } = message;
+        const socket = sockets.get(connectionId);
+        if (socket) {
+          socket.abort();
         }
         break;
       }
