@@ -2,6 +2,7 @@
 
 | Version                  | Release date  |
 |--------------------------|---------------|
+| [2.0.1](#201-2026-07-22) | July 2026     |
 | [2.0.0](#200-2026-07-17) | July 2026     |
 | [1.0.4](#104-2023-08-12) | August 2023   |
 | [1.0.3](#103-2023-02-24) | February 2023 |
@@ -9,7 +10,15 @@
 | [1.0.1](#101-2021-07-01) | July 2021     |
 | [1.0.0](#100-2021-01-25) | January 2021  |
 
-# [2.0.0](https://github.com/socketio/socket.io-sticky/compare/1.0.4...2.0.0) (2026-07-17)
+## [2.0.1](https://github.com/socketio/socket.io-sticky/compare/2.0.0...2.0.1) (2026-07-22)
+
+
+### Bug Fixes
+
+* prevent upload body corruption ([714ed80](https://github.com/socketio/socket.io-sticky/commit/714ed8048fb2a1e44971bb33f67045ab8461693d))
+
+
+## [2.0.0](https://github.com/socketio/socket.io-sticky/compare/1.0.4...2.0.0) (2026-07-17)
 
 
 ### Bug Fixes
